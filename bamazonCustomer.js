@@ -8,3 +8,4 @@ var connection = mysql.createConnection({
     password: "password",
     database: "bamazon_db"
 });
+
