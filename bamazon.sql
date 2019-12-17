@@ -1,6 +1,6 @@
--- drop database if exists bamazon_db;
--- create database bamazon_db;
--- use bamazon_db;
+-- drop database if exists bamazon;
+-- create database bamazon;
+-- use bamazon;
 
 -- create table products (
 -- item_id integer not null auto_increment,
@@ -22,3 +22,4 @@
 --        ("socks", "clothing", 10.00, 40),
 --        ("love seat", "furtniture", 600.00, 12),
 --        ("table", "furniture", 100.00, 30);
+       
