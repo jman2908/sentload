@@ -1,5 +1,6 @@
 var mysql = require("mysql");
 var inquirer = require("inquirer");
+require("console.table");
 
 var connection = mysql.createConnection({
   host: "localhost",
@@ -27,61 +28,117 @@ function queryBamazon() {
   console.log("Items up for sale");
   console.log("------------------");
   connection.query("SELECT * FROM products", function(err, res) {
-    for (var i = 0; i < res.length; i++) {
-      console.log(res[i].item_id + " | " + res[i].product_name + " | Unit Price: $" + res[i].price + " | Units Remaining: " + res[i].quantity);
-      console.log("------------------");
+    if (err) {
+      console.error("error connecting: " + err.stack);
     }
-    mainMenu();
+    loadProducts();
   });
-}
+  
 
-var mainMenu = function() {
-  inquirer.prompt([
-    {
-      type: "list",
-      message: "Please select:",
-      choices: ["Buy an Item", "Exit"],
-      name: "choice"
-    }
-  ]).then(function(res) {
-    switch (res.choice) {
-      case ("Exit"):
-        connection.end();
-        return;
-      case ("Buy an Item"):
-        buyItem();
-        break;
-    }
-  });
-};
+  function loadProducts() {
+ 
+    connection.query("SELECT * FROM products", function(err, res) {
+      if (err) throw err;
+      console.table(res);
 
-var buyItem = function() {
-  inquirer.prompt([
-    {
-      type: "input",
-      message: "enter the item id of the product you would like to buy",
-      name: "item"
-    }, {
-      type: "number",
-      message: "how many do you want to buy?",
-      name: "quantity"
-    }
-  ]).then(function(argument) {
-    connection.query("SELECT quantity, price, product_name FROM products WHERE item_id = ?", [argument.item], function(err, res) {
-      var numSold = argument.quantity;
-      var totalCost = res[0].price * numSold;
-      var newQuantity = parseInt(res[0].quantity - numSold);
-      if (err) {
-        return console.log(err);
-      }
-      if (res[0].quantity < argument.quantity) {
-        return console.log("ERROR: Insufficient store quantity.");
-      }
-      connection.query("UPDATE products SET quantity = ? WHERE item_id = ?", [newQuantity, argument.item]);
-      console.log("Your order for " + numSold + " units of " + res[0].product_name + " has been placed.");
-      console.log("You spent $" + totalCost + " on your purchase.");
-      console.log("Thank you for shopping with Bamazon. Logging you out now. Please come again.");
-      connection.end();
+      promptCustomerForItem(res);
     });
-  });
+  }
+  
+
+  function promptCustomerForItem(inventory) {
+   
+    inquirer
+      .prompt([
+        {
+          type: "input",
+          name: "choice",
+          message: "What is the ID of the item you would you like to purchase? [Quit with Q]",
+          validate: function(val) {
+            return !isNaN(val) || val.toLowerCase() === "q";
+          }
+        }
+      ])
+      .then(function(val) {
+       
+        checkIfShouldExit(val.choice);
+        var choiceId = parseInt(val.choice);
+        var product = checkInventory(choiceId, inventory);
+  
+       
+        if (product) {
+         
+          promptCustomerForQuantity(product);
+        }
+        else {
+          // Otherwise let them know the item is not in the inventory, re-run loadProducts
+          console.log("\nThat item is not in the inventory.");
+          loadProducts();
+        }
+      });
+  }
+  
+  // Prompt the customer for a product quantity
+  function promptCustomerForQuantity(product) {
+    inquirer
+      .prompt([
+        {
+          type: "input",
+          name: "quantity",
+          message: "How many would you like? [Quit with Q]",
+          validate: function(val) {
+            return val > 0 || val.toLowerCase() === "q";
+          }
+        }
+      ])
+      .then(function(val) {
+        // Check if the user wants to quit the program
+        checkIfShouldExit(val.quantity);
+        var quantity = parseInt(val.quantity);
+  
+        // If there isn't enough of the chosen product and quantity, let the user know and re-run loadProducts
+        if (quantity > product.stock_quantity) {
+          console.log("\nInsufficient quantity!");
+          loadProducts();
+        }
+        else {
+          // Otherwise run makePurchase, give it the product information and desired quantity to purchase
+          makePurchase(product, quantity);
+        }
+      });
+  }
+  
+  // Purchase the desired quantity of the desired item
+  function makePurchase(product, quantity) {
+    connection.query(
+      "UPDATE products SET stock_quantity = stock_quantity - ? WHERE item_id = ?",
+      [quantity, product.item_id],
+      function(err, res) {
+        // Let the user know the purchase was successful, re-run loadProducts
+        console.log("\nSuccessfully purchased " + quantity + " " + product.product_name + "'s!");
+        loadProducts();
+      }
+    );
+  }
+  
+  // Check to see if the product the user chose exists in the inventory
+  function checkInventory(choiceId, inventory) {
+    for (var i = 0; i < inventory.length; i++) {
+      if (inventory[i].item_id === choiceId) {
+        // If a matching product is found, return the product
+        return inventory[i];
+      }
+    }
+    // Otherwise return null
+    return null;
+  }
+  
+  // Check to see if the user wants to quit the program
+  function checkIfShouldExit(choice) {
+    if (choice.toLowerCase() === "q") {
+      // Log a message and exit the current node process
+      console.log("Goodbye!");
+      process.exit(0);
+    }
+  }
 };
